@@ -2,3 +2,6 @@
 data/data/
 data/
 *.sqlite
+
+data/
+*.sqlite

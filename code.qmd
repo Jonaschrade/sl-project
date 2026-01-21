@@ -1,0 +1,97 @@
+---
+title: "sl-project"
+format: html
+editor: visual
+---
+
+```{r}
+pacman::p_load(DBI, RSQLite, tidyverse, lubridate)
+```
+
+```{r}
+#| echo: false
+con <- dbConnect(RSQLite::SQLite(), dbname = "data/database.sqlite")
+dbListTables(con)
+df_player_raw <- dbGetQuery(con, "SELECT * FROM Player JOIN Player_Attributes USING (player_api_id)")
+
+names(df_player_raw) <- make.unique(names(df_player_raw))
+dbDisconnect(con)
+```
+
+```{r}
+
+df_player<-df_player_raw%>%
+  filter(complete.cases(.))%>%
+  mutate(date=ymd_hms(date),
+         birthday=ymd_hms(birthday),
+         age=floor(time_length(interval(birthday, date),"years")))%>%
+  select(-id,-id.1,-player_name, -player_fifa_api_id, -player_fifa_api_id.1, -weight, -height, -birthday, -date, -defensive_work_rate, -attacking_work_rate, -overall_rating)%>%
+  filter(age>=16)
+
+X<-model.matrix(potential~.,df_player)[,-1]
+y<-df_player$potential
+```
+
+```{r}
+# Set up 5-fold cross validation indices
+set.seed(123)
+folds <- createFolds(y, k = 5, returnTrain = TRUE)
+
+mse_train <- c()
+mse_test  <- c()
+mae_train <- c()
+mae_test  <- c()
+
+
+# Perform 5-fold CV
+for (i in 1:5) {
+
+  train_idx <- folds[[i]]
+  test_idx  <- setdiff(seq_len(nrow(X)), train_idx)
+
+  X_train <- X[train_idx, ]
+  X_test  <- X[test_idx, ]
+  y_train <- y[train_idx]
+  y_test  <- y[test_idx]
+
+  # z-score within this fold
+  preproc <- preProcess(X_train, method = c("center", "scale"))
+  X_train_scaled <- predict(preproc, X_train)
+  X_test_scaled  <- predict(preproc, X_test)
+
+  # fit
+  model <- lm(y_train ~ ., data = X_train_scaled)
+
+  # predict
+  y_pred_train <- predict(model, newdata = X_train_scaled)
+  y_pred_test  <- predict(model, newdata = X_test_scaled)
+
+  # metrics
+  mse_train[i] <- mse(y_train, y_pred_train)
+  mse_test[i]  <- mse(y_test, y_pred_test)
+
+  mae_train[i] <- mae(y_train, y_pred_train)
+  mae_test[i]  <- mae(y_test, y_pred_test)
+}
+
+# results using tidyverse tibble
+cv_results <- tibble(
+  Fold      = 1:5,
+  Train_MSE = mse_train,
+  Test_MSE  = mse_test,
+  Train_MAE = mae_train,
+  Test_MAE  = mae_test
+)
+
+cv_results
+
+# averaged over all folds
+kfold_summary <- tibble(
+  Mean_Train_MSE = mean(mse_train),
+  Mean_Test_MSE  = mean(mse_test),
+  Mean_Train_MAE = mean(mae_train),
+  Mean_Test_MAE  = mean(mae_test)
+)
+
+kfold_summary
+```

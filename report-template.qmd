@@ -1,8 +1,9 @@
 ---
 title: "Untitled"
-author: "YOUR NAMES AND STUDENT ID'S HERE"
+author: "Jonas Schrade (01/---) & Niklas Bacher (01/1081503)"
 format: pdf
 ---
+
 # Introduction
 An introduction should introduce the problem and data you're working on, give some background and relevant detail for the reader, and explain why it is important. 
 

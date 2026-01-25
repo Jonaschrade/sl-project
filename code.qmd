@@ -55,7 +55,7 @@ Estimate a baseline model for predicting player potential and evaluate its out-o
 set.seed(123)
 
 player_id <- df_player$player_api_id
-X <- X[, colnames(X) != "player_api_id"]
+X <- X[, !colnames(X) %in% c("player_api_id","player_fifa_api_id.1")]
 folds <- groupKFold(group=player_id, k = 5)
 
 mse_train <- c()
@@ -63,6 +63,7 @@ mse_test  <- c()
 mae_train <- c()
 mae_test  <- c()
 
+predictions <- tibble()
 
 # Perform 5-fold CV
 for (i in 1:5) {
@@ -86,6 +87,7 @@ for (i in 1:5) {
   # predict
   y_pred_train <- predict(model, newdata = as.data.frame(X_train_scaled))
   y_pred_test  <- predict(model, newdata = as.data.frame(X_test_scaled))
+  predictions <- bind_rows(predictions,tibble(fold = i, player_api_id = player_id[test_idx], actual = y_test,predicted = y_pred_test))
 
   # metrics
   mse_train[i] <- mse(y_train, y_pred_train)

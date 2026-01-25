@@ -49,6 +49,7 @@ X <- X[, colnames(X) != "player_api_id"]
 
 
 ```{r}
+#| eval: false
 # OUTER grouped 5-fold CV
 dir.create("models_nn", showWarnings = FALSE)
 
@@ -148,7 +149,7 @@ build_and_fit <- function(X_train, y_train,
 }
 
 
-start_i <- 2
+start_i <- 1
 
 # OUTER LOOP over k-folds
 for (i in start_i:length(outer_folds)) {
@@ -171,6 +172,7 @@ for (i in start_i:length(outer_folds)) {
   
   ## Fold-specific validation-split
   groups_outer <- unique(player_id[train_idx])
+  
   val_groups <- sample(
     groups_outer,
     size = ceiling(0.2 * length(groups_outer))
@@ -220,7 +222,6 @@ for (i in start_i:length(outer_folds)) {
     
     #### Checkpoint loss log
     saveRDS(loss_log, file = "models_nn/loss_log_checkpoint.rds")
-    
     clear_session()
   }
   
@@ -269,19 +270,62 @@ for (i in start_i:length(outer_folds)) {
 
   clear_session()
 } 
+```
+
+
+```{r}
+# Re-loading models 
+n_folds <- 5
+models <- vector("list", n_folds)
+
+for (i in seq_len(n_folds)) {
+  models[[i]] <- load_model(
+    sprintf("models_nn/nn_outer_fold_%d.keras", i)
+  )
+}
+
+
+# Inference Loop:
+outer_results <- vector("list", length(models))
+
+for (i in seq_along(models)) {
+
+  model <- models[[i]]
+  train_idx <- outer_folds[[i]]
+  test_idx  <- setdiff(seq_len(nrow(X)), train_idx)
+
+  X_train <- X[train_idx, ]
+  X_test  <- X[test_idx, ]
+  y_train <- y[train_idx]
+  y_test  <- y[test_idx]
+
+  
+  ## Fold-specific normalization
+  preproc <- preProcess(X_train, method = c("center", "scale"))
+  X_train_scaled <- predict(preproc, X_train)
+  X_test_scaled  <- predict(preproc, X_test)
+
+  ## Fold evaluation
+  y_pred_train <- as.numeric(predict(model, X_train_scaled))
+  y_pred_test  <- as.numeric(predict(model, X_test_scaled))
+
+  outer_results2[[i]] <- tibble(
+    Fold = i,
+    Train_MSE = mse(y_train, y_pred_train),
+    Test_MSE  = mse(y_test, y_pred_test),
+    Train_MAE = mae(y_train, y_pred_train),
+    Test_MAE  = mae(y_test, y_pred_test)
+  )
+}
 
 
 # Final summaries
 cv_results <- bind_rows(outer_results)
-best_params_df <- bind_rows(best_params, .id = "Fold")
-
 cv_results
-best_params_df
-
 cv_results %>%
   summarise(across(-Fold, mean))
-```
 
+```
 
 
 

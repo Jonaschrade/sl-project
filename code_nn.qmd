@@ -3,6 +3,7 @@ title: "sl-project"
 format: html
 editor: visual
 ---
+
 ```{r}
 library(reticulate)
 use_condaenv("keras3", required = TRUE)
@@ -46,7 +47,6 @@ y<-df_player$potential
 player_id <- df_player$player_api_id
 X <- X[, colnames(X) != "player_api_id"]
 ```
-
 
 ```{r}
 #| eval: false
@@ -190,6 +190,9 @@ for (i in start_i:length(outer_folds)) {
   grid_results <- grid %>%
     mutate(val_loss = NA_real_)
   
+  best_fit      <- NULL
+  best_val_loss <- Inf
+  
   ### Build and Fit model for each grid combination
   for (g in seq_len(nrow(grid))) {
     fit <- build_and_fit(
@@ -210,18 +213,11 @@ for (i in start_i:length(outer_folds)) {
     #### Track validation loss for each grid combination
     grid_results$val_loss[g] <- fit$val_loss
     
-    #### Log validation loss per fold, per grid, per epoch
-    loss_log[[paste(i, g, sep = "_")]] <-
-      tibble(
-        outer = i,
-        grid  = g,
-        epoch = seq_along(fit$history$metrics$loss),
-        loss = fit$history$metrics$loss,
-        val_loss = fit$history$metrics$val_loss
-      )
     
-    #### Checkpoint loss log
-    saveRDS(loss_log, file = "models_nn/loss_log_checkpoint.rds")
+    if (fit$val_loss < best_val_loss) {
+      best_val_loss <- fit$val_loss
+      best_fit <- fit
+    }
     clear_session()
   }
   
@@ -231,6 +227,14 @@ for (i in start_i:length(outer_folds)) {
     slice(1)
 
   best_params[[i]] <- best_row
+  
+  loss_log[[paste0("fold_", i)]] <-
+    tibble(
+      Fold = i,
+      epoch = seq_along(best_fit$history$metrics$val_loss),
+      val_loss = best_fit$history$metrics$val_loss
+    )
+  
   
   ## Refit best model of the fold
   final_fit <- build_and_fit(
@@ -270,8 +274,10 @@ for (i in start_i:length(outer_folds)) {
 
   clear_session()
 } 
-```
 
+saveRDS(best_params, file = "models_nn/best_params.rds")
+saveRDS(loss_log,   file = "models_nn/loss_log.rds")
+```
 
 ```{r}
 # Re-loading models 
@@ -286,7 +292,7 @@ for (i in seq_len(n_folds)) {
 
 
 # Inference Loop:
-outer_results <- vector("list", length(models))
+outer_results2 <- vector("list", length(models))
 
 for (i in seq_along(models)) {
 
@@ -320,15 +326,14 @@ for (i in seq_along(models)) {
 
 
 # Final summaries
-cv_results <- bind_rows(outer_results)
+cv_results <- bind_rows(outer_results2)
 cv_results
 cv_results %>%
   summarise(across(-Fold, mean))
 
+
+saveRDS(cv_results, file = "models_nn/evaluation_metrics_nn.rds")
 ```
-
-
-
 
 ```{r}
 player_names <- df_player_raw %>%
@@ -343,7 +348,4 @@ test_df <- df_player[test_idx, ] %>%
   left_join(player_names, by = "player_api_id") %>%
   select(player_api_id, player_name, potential, y_true, y_pred, age)
 
-``` 
-
-
-
+```

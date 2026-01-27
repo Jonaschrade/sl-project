@@ -90,17 +90,21 @@ y <- df_player$potential
 
 # Task 2 - Baseline Comparison with Traditional SL Models
 
-Estimate a baseline model for predicting player potential and evaluate its out-of-sample performance using grouped 5-fold cross-validation. We choose ordinary least squares linear regression as the baseline because it is a standard, interpretable reference model for continuous outcomes and allows a fair comparison to the neural network: it uses the same input information but imposes a simple functional form. To avoid information leakage when the same player appears multiple times, we once again construct group-wise folds based on each player's id so that all observations of a player remain within the same fold. Within each fold, we standardize predictors using only the training data and apply the same transformation to the test data. We then fit the linear model on the training fold and compute MSE and MAE on both training and test folds; finally, we summarize results across folds to obtain a robust estimate of generalization performance.
+We estimate a regularized baseline model for predicting player potential and evaluate its out-of-sample performance using grouped 10-fold cross-validation. Specifically, we employ a Lasso regression, which provides a natural extension of the linear model by introducing $l_1$-regularization to control overfitting and perform implicit feature selection.
+
+To prevent information leakage arising from repeated observations of the same player, we, once again, construct group-wise folds based on player identifiers, ensuring that all observations of a given player are assigned to the same fold. Within each training fold, the regularization parameter is selected via internal cross-validation, and the model is then estimated on the corresponding training data.
+
+Predictions are generated for both training and test folds, and model performance is assessed using mean squared error (MSE) and mean absolute error (MAE). Finally, results are averaged across folds to obtain a robust estimate of the model’s generalization performance.
 
 ```{r}
-#| label: linear_model
+#| label: lasso_model
 #| message: false
-# Set up 5-fold cross validation indices
+# Set up 10-fold cross validation indices
 set.seed(123)
 
 player_id <- df_player$player_api_id
 X <- X[, !colnames(X) %in% c("player_api_id","player_fifa_api_id.1")]
-folds <- groupKFold(group=player_id, k = 5)
+folds <- groupKFold(group=player_id, k = 10)
 
 mse_train <- c()
 mse_test  <- c()
@@ -109,8 +113,8 @@ mae_test  <- c()
 
 predictions <- tibble()
 
-# Perform 5-fold CV
-for (i in 1:5) {
+# Perform 10-fold CV
+for (i in 1:10) {
 
   train_idx <- folds[[i]]
   test_idx  <- setdiff(seq_len(nrow(X)), train_idx)
@@ -120,18 +124,16 @@ for (i in 1:5) {
   y_train <- y[train_idx]
   y_test  <- y[test_idx]
 
-  # z-score within this fold
-  preproc <- preProcess(X_train, method = c("center", "scale"))
-  X_train_scaled <- predict(preproc, X_train)
-  X_test_scaled  <- predict(preproc, X_test)
+  # Model matrices (glmnet will standardize internally)
+  X_train_mm <- model.matrix(~ . - 1, data = as.data.frame(X_train))
+  X_test_mm  <- model.matrix(~ . - 1, data = as.data.frame(X_test))
 
-  # fit
-  model <- lm(y_train ~ ., data = as.data.frame(X_train_scaled))
+  cv_fit <- cv.glmnet(x = X_train_mm,y = y_train, alpha = 1, standardize = TRUE)
 
-  # predict
-  y_pred_train <- predict(model, newdata = as.data.frame(X_train_scaled))
-  y_pred_test  <- predict(model, newdata = as.data.frame(X_test_scaled))
-  predictions <- bind_rows(predictions,tibble(fold = i, player_api_id = player_id[test_idx], actual = y_test,predicted = y_pred_test))
+  # ---- Predict ----
+  y_pred_train <- as.numeric(predict(cv_fit, newx = X_train_mm, s = "lambda.min"))
+  y_pred_test  <- as.numeric(predict(cv_fit, newx = X_test_mm,  s = "lambda.min"))
+  predictions <- bind_rows(predictions,tibble(fold = i, player_api_id = player_id[test_idx],   actual = y_test,predicted = y_pred_test))
 
   # metrics
   mse_train[i] <- mse(y_train, y_pred_train)
@@ -142,7 +144,7 @@ for (i in 1:5) {
 
 # results using tidyverse tibble
 cv_results <- tibble(
-  Fold      = 1:5,
+  Fold      = 1:10,
   Train_MSE = mse_train,
   Test_MSE  = mse_test,
   Train_MAE = mae_train,
@@ -160,7 +162,7 @@ kfold_summary <- tibble(
 kfold_summary
 ```
 
-The results indicate highly stable performance of the linear regression model across all five folds. Training and test errors are consistently close in each fold, suggesting no evidence of overfitting. Test MSE varies only moderately across folds (around 15.1–16.2), while MAE remains tightly clustered around 3. This limited variability across folds indicates robust generalization performance of the baseline model.
+The results indicate highly stable performance of the lasso model across all 10 folds. Training and test errors are consistently close in each fold, suggesting no evidence of overfitting. Test MSE varies only moderately across folds (around 15.78–15.88), while MAE remains tightly clustered around 3. This limited variability across folds indicates robust generalization performance of the baseline model.
 
 ## Model Diagnostics
 

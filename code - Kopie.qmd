@@ -4,13 +4,13 @@ format: html
 editor: visual
 ---
 
-# Data Import and Preprocessing
+# Data Import
 
 Load all required packages for data handling, preprocessing, model estimation, cross-validation and performance evaluation.
 
 ```{r}
 #| label: load-pckg
-pacman::p_load(DBI, RSQLite, tidyverse, lubridate, caret, Metrics, glmnet)
+pacman::p_load(DBI, RSQLite, tidyverse, lubridate, naniar, caret, Metrics)
 ```
 
 Connect to the SQLite database, extract player-level information by joining player metadata with player attributes, and close the database connection.
@@ -26,7 +26,9 @@ names(df_player_raw) <- make.unique(names(df_player_raw))
 dbDisconnect(con)
 ```
 
-Clean and prepare the player dataset for modeling: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age \< 16 as we identified potentially erroneous records for very young players. Then construct the design matrix with one-hot encoding for categorical variables and define the target variable (potential).
+# Exploratory Analysis
+
+Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age \< 16 as we identified potentially erroneous records for very young players.
 
 ```{r}
 #| label: prep-df
@@ -34,14 +36,103 @@ df_player <- df_player_raw %>%
   mutate(date = ymd_hms(date),
          birthday = ymd_hms(birthday),
          age = floor(time_length(interval(birthday, date),"years"))) %>%
-  select(-id,-id.1,-player_name, -player_fifa_api_id, -player_fifa_api_id.1, -weight, -height, -birthday, -date, -defensive_work_rate, -attacking_work_rate, -overall_rating) %>%
+  select(-id,-id.1,-player_name, -player_fifa_api_id, -player_fifa_api_id.1, -weight, -height, -birthday, -date, -defensive_work_rate, -attacking_work_rate) %>%
   filter(age>=16)
+```
 
-df_player <- df_player %>% filter(complete.cases(.))
+Visualizing the extent of missing data across variables in the player dataset by plotting the percentage of missing values for each variable, providing a overview of data completeness and highlighting variables that may require cleaning or exclusion prior to modeling.
+
+```{r}
+#| label: missings
+#| fig.height: 6
+#| fig.width: 7
+gg_miss_var(df_player, show_pct = TRUE) +
+  labs(title = "Percentage of Missing Values per Variable")
+```
+
+This chunk computes correlations between player potential and all numeric variables, selects the five strongest and five weakest correlates, and visualizes their pairwise correlations in a heatmap.
+
+```{r}
+#| label: corr-heatmap
+target <- "potential"
+
+cors <- df_player %>%
+  select(where(is.numeric)) %>%
+  summarise(across(-all_of(target),~ cor(.x, .data[[target]], use = "pairwise.complete.obs"))) %>%
+  pivot_longer(everything(), names_to = "var", values_to = "r")
+
+top5  <- cors %>% arrange(desc(r)) %>% slice(1:5)
+flop5 <- cors %>% arrange(r) %>% slice(1:5)
+
+vars <- c(target, top5$var, flop5$var)
+num_df <- df_player %>% select(all_of(vars))
+
+C <- cor(num_df, use = "pairwise.complete.obs")
+as.data.frame(C) %>%
+  tibble::rownames_to_column("Var1") %>%
+  pivot_longer(-Var1, names_to = "Var2", values_to = "corr") %>%
+  filter(!is.na(corr)) %>%
+  ggplot(aes(Var2, Var1, fill = corr)) +
+  geom_tile() +
+  scale_fill_gradient2(limits = c(-1, 1)) +
+  coord_fixed() +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(x = NULL, y = NULL, fill = "r",title = "Top and Bottom Correlates of Player Potential")
+```
+
+Visualizing the marginal distributions of all predictors using faceted density plots, allowing a compact inspection of scale differences, skewness, and distributional shapes across variables.
+
+```{r}
+#| label: pred-distr
+#| fig.height: 6
+#| fig.width: 9
+predictors <- colnames(X)
+
+df_long <- df_plot %>% 
+  pivot_longer(
+    cols = all_of(predictors),
+    names_to = "predictor",
+    values_to = "value")
+
+ggplot(df_long, aes(x = value)) +
+  geom_density(fill = "grey70", alpha = 0.6) +
+  facet_wrap(~ predictor, scales = "free") +
+  labs(title = "Distributions of Predictors", x = NULL, y = "Density") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5), axis.text.y=element_blank())
+```
+
+This chunk compares the empirical distributions of player potential and overall rating.
+
+```{r}
+#| label: pot-ovr-dist
+#| warning: false
+df_plot <- df_player %>%
+  select(potential, overall_rating) %>%
+  pivot_longer(cols = c(potential, overall_rating),names_to = "variable",values_to = "value")
+
+ggplot(df_plot, aes(x = value, fill = variable)) +
+  geom_histogram(binwidth = 1,boundary = 0,position = "identity",alpha = 0.6,color = "black") +
+  scale_fill_manual(values = c(potential = "aquamarine",overall_rating = "chocolate1"),
+    labels = c(potential = "Potential",overall_rating = "Overall rating")) +
+  labs(title = "Distribution of Player Ratings", x = "FIFA Score", y = NULL, fill = NULL) +
+  theme_minimal() +
+  theme(plot.title   = element_text(hjust = 0.5))
+```
+
+Construct the design matrix with one-hot encoding for categorical variables and define the target variable (potential).
+
+```{r}
+#| label: model-matrix
+df_player <- df_player %>% filter(complete.cases(.)) %>% 
+  select(-overall_rating) ####
 
 X <- model.matrix(potential~.,df_player)[,-1]
 y <- df_player$potential
 ```
+
+# Task 1 - Deep Feedforward Neural Network
 
 # Task 2 - Baseline Comparison with Traditional SL Models
 
@@ -52,9 +143,9 @@ To prevent information leakage arising from repeated observations of the same pl
 Predictions are generated for both training and test folds, and model performance is assessed using mean squared error (MSE) and mean absolute error (MAE). Finally, results are averaged across folds to obtain a robust estimate of the model’s generalization performance.
 
 ```{r}
-#| label: linear_model
+#| label: lasso_model
 #| message: false
-# Set up 5-fold cross validation indices
+# Set up 10-fold cross validation indices
 set.seed(123)
 
 player_id <- df_player$player_api_id

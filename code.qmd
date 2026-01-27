@@ -98,6 +98,8 @@ y <- df_player$potential
 This script implements a **nested, group-aware cross-validated neural network training pipeline** for regression using Keras. To prevent data leakage across repeated observations of the same player, all cross-validation splits are **grouped by `player_api_id`**, ensuring that each player appears in only one fold at a time. A 5-fold **outer cross-validation loop** is used to obtain unbiased estimates of generalization performance, while an **inner validation split (20% of players within each fold)** is employed for hyperparameter selection. Within each fold, features are standardized using parameters learned exclusively from the inner training set. Model selection is performed via a grid search over network architecture (three hidden layers), dropout rates, and learning-rate annealing factors. Each model is trained with **L2 regularization, batch normalization, dropout, early stopping, and adaptive learning-rate reduction/annealing** to improve convergence and reduce overfitting. The best-performing hyperparameter configuration (based on validation MSE) is then refit on the full outer training fold and evaluated on the held-out test fold. Trained models, optimal hyperparameters, loss trajectories, and fold-specific performance metrics (MSE and MAE) are saved to disk to ensure reproducibility and facilitate post-hoc analysis.
 
 ```{r}
+#| label: Task1 Neural Network
+#| eval: false
 
 set.seed(123)
 

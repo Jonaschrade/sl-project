@@ -24,7 +24,7 @@ df_player_raw <- dbGetQuery(con, "SELECT * FROM Player JOIN Player_Attributes US
 dbDisconnect(con)
 ```
 
-Clean and prepare the player dataset for modeling: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age < 16 as we identified potentially erroneous records for very young players. Then construct the design matrix with one-hot encoding for categorical variables and define the target variable (potential).
+Clean and prepare the player dataset for modeling: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age \< 16 as we identified potentially erroneous records for very young players. Then construct the design matrix with one-hot encoding for categorical variables and define the target variable (potential).
 
 ```{r}
 #| label: prep-df
@@ -40,10 +40,9 @@ X <- model.matrix(potential~.,df_player)[,-1]
 y <- df_player$potential
 ```
 
-
 # Task 2 - Baseline Comparison with Traditional SL Models
 
-Estimate a baseline model for predicting player potential and evaluate its out-of-sample performance using grouped 5-fold cross-validation. We choose ordinary least squares linear regression as the baseline because it is a standard, interpretable reference model for continuous outcomes and allows a fair comparison to the neural network: it uses the same input information but imposes a simple functional form. To avoid information leakage when the same player appears multiple times, we once again construct group-wise folds based on each player's id so that all observations of a player remain within the same fold. Within each fold, we standardize predictors using only the training data  and apply the same transformation to the test data. We then fit the linear model on the training fold and compute MSE and MAE on both training and test folds; finally, we summarize results across folds to obtain a robust estimate of generalization performance.
+Estimate a baseline model for predicting player potential and evaluate its out-of-sample performance using grouped 5-fold cross-validation. We choose ordinary least squares linear regression as the baseline because it is a standard, interpretable reference model for continuous outcomes and allows a fair comparison to the neural network: it uses the same input information but imposes a simple functional form. To avoid information leakage when the same player appears multiple times, we once again construct group-wise folds based on each player's id so that all observations of a player remain within the same fold. Within each fold, we standardize predictors using only the training data and apply the same transformation to the test data. We then fit the linear model on the training fold and compute MSE and MAE on both training and test folds; finally, we summarize results across folds to obtain a robust estimate of generalization performance.
 
 ```{r}
 #| label: linear_model
@@ -113,7 +112,6 @@ kfold_summary
 
 The results indicate highly stable performance of the linear regression model across all five folds. Training and test errors are consistently close in each fold, suggesting no evidence of overfitting. Test MSE varies only moderately across folds (around 15.1–16.2), while MAE remains tightly clustered around 3. This limited variability across folds indicates robust generalization performance of the baseline model.
 
-
 ## Model Diagnostics
 
 To assess the robustness of the baseline linear regression model, we conduct a series of diagnostic checks examining key model assumptions and the stability of predictive performance.
@@ -142,8 +140,8 @@ ggplot(df_long, aes(x = value, y = potential)) +
   labs(title = "Potential vs. Predictors",y = "Potential",x = NULL) +
   theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
 ```
-The diagnostic plots indicate largely monotonic and approximately linear relationships between player potential and the majority of predictors. While the strength of associations varies across attributes, no clear nonlinear patterns or threshold effects are observed. Overall, the linearity assumption appears reasonably satisfied, supporting the use of a linear regression model as an appropriate baseline.
 
+The diagnostic plots indicate largely monotonic and approximately linear relationships between player potential and the majority of predictors. While the strength of associations varies across attributes, no clear nonlinear patterns or threshold effects are observed. Overall, the linearity assumption appears reasonably satisfied, supporting the use of a linear regression model as an appropriate baseline.
 
 ### Homoskedasticity Check
 
@@ -159,6 +157,7 @@ ggplot(df_resid, aes(x = fitted, y = resid)) +
   labs(title = "Residuals vs. Fitted Values",x = "Fitted values",y = "Residuals") +
   theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
 ```
+
 The residuals-versus-fitted plot shows that residuals are centered around zero with a broadly constant spread across the range of fitted values. While a slight increase in variance is visible in the mid-left-range, no clear funneling patten emerges. Overall, deviations from homoskedasticity appear mild and are unlikely to affect predictive performance.
 
 ### Normality of Residuals
@@ -173,4 +172,5 @@ ggplot(df_qq, aes(sample = resid)) +
   labs(title = "Normal Q–Q Plot of Residuals", x = "Theoretical Quantiles", y = "Sample Quantiles") +
   theme_minimal() + theme(plot.title = element_text(hjust = 0.5))
 ```
+
 The Q–Q plot of the residuals indicates approximate normality, with observations closely following the reference line in the central region. Deviations are visible in the tails, suggesting slightly heavier tails than a normal distribution, which is expected given the large sample size. These deviations are unlikely to affect the model’s predictive performance massivly.

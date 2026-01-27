@@ -28,7 +28,7 @@ dbDisconnect(con)
 
 # Exploratory Analysis
 
-Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age < 16 as we identified potentially erroneous records for very young players.
+Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age \< 16 as we identified potentially erroneous records for very young players.
 
 ```{r}
 #| label: prep-df
@@ -76,15 +76,15 @@ as.data.frame(C) %>%
   labs(x = NULL, y = NULL, fill = "r",title = "Top and Bottom Correlates of Player Potential")
 ```
 
-
 Construct the design matrix with one-hot encoding for categorical variables and define the target variable (potential).
 
 ```{r}
 #| label: model-matrix
-X <- model.matrix(potential~.,df_player %>% filter(complete.cases(.)))[,-1]
+df_player <- df_player %>% filter(complete.cases(.))
+
+X <- model.matrix(potential~.,df_player)[,-1]
 y <- df_player$potential
 ```
-
 
 # Task 1 - Deep Feedforward Neural Network
 

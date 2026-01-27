@@ -337,7 +337,7 @@ saveRDS(loss_log,   file = "models_nn/loss_log.rds")
 
 ## Also save evaluation metrics
 cv_results <- bind_rows(outer_results)
-saveRDS(cv_results, file = "models_nn1/evaluation_metrics_nn.rds")
+saveRDS(cv_results, file = "models_nn/evaluation_metrics_nn.rds")
 ```
 
 # Task 2 - Baseline Comparison with Traditional SL Models

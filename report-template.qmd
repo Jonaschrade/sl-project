@@ -13,7 +13,44 @@ From an applied perspective, accurately predicting player performance based on s
 The goal of this project is to assess whether complex models such as deep neural networks provide meaningful improvements over simpler statistical learning approaches in mapping player characteristics to observed performance measures and potential ratings. Player potential is inherently a latent concept: it reflects expected development and long-term ability rather than directly observed outcomes. Capturing position-specific differences that are not explicitly encoded in the input variables may favor more flexible models such as neural networks. To evaluate this, a traditional benchmark model is used as a baseline and compared against a neural network using the same predictors and outcome. This comparison allows us to determine whether deep learning provides added value in identifying players with high potential, or whether simpler models already capture most of the relevant signal contained in the FIFA-based player attributes.
 
 # Analysis 
-Any exploratory analysis of your data, and general summary of the data (e.g. summary statistics, correlation heatmaps, graphs, information about the data...). Tell the reader about the types of variables you have and some general information about them, Plots and/or Tables are always great. This should also include any cleaning and joining you did. 
+
+The analysis draws on player-level observations from the European Soccer Database, combining repeated measurements of FIFA-derived player attributes with assigned ratings of potential. The dataset contains a rich set of numeric variables capturing technical skills, physical abilities, and position-specific competencies, complemented by basic player characteristics such as age and preferred foot.
+
+### Data Preparation
+
+Several preprocessing steps were applied prior to analysis. Measurement dates and birthdates were used to compute each player's age as the number of full years at the time each attribute snapshot was recorded. Observations corresponding to players younger than 16 were excluded to remove implausible or non-comparable records, which were identified in a manual screening. Non-informative identifiers and metadata, including player names, internal IDs, and FIFA-specific API keys, were dropped to retain only variables relevant for prediction.
+
+To ensure compatibility with the modeling framework, observations with missing values were removed. Overall missingness in the dataset is low, with only a small subset of technical attributes exhibiting minor gaps. Given the large sample size and the focus on predictive performance rather than inference, a complete-case approach was adopted. When modeling player potential, the overall rating was excluded from the feature set to avoid introducing mechanically related information into the prediction task.
+
+### Variable Structure and Correlations
+
+The resulting dataset consists primarily of continuous numeric predictors bounded between 0 and 100, reflecting FIFA’s attribute scoring system, alongside a small number of discrete or binary variables such as preferred foot. Correlation analysis reveals that player potential is strongly associated with several technical and cognitive attributes, including vision, short passing, reactions, and ball control. These relationships align with the role of such skills in evaluations of long-term player quality.
+
+In contrast, goalkeeper-specific attributes exhibit weak or negative correlations with potential when considering the full sample. This pattern reflects the strong positional structure of the data: attributes relevant for goalkeepers carry little information for outfield players and vice versa. The correlation heatmap highlights this divide and suggests that interactions between player position and skill attributes may be important for prediction, even when position itself is not explicitly modeled.
+
+::: {layout-ncol=2}
+
+![](img/cor_heatmap.png){width=100%}
+
+![](img/histograms_ratings.png){width=100%}
+
+:::
+
+
+### Distributions of Attributes and Ratings
+
+The marginal distributions of player attributes are generally unimodal and concentrated around mid-to-high values. Goalkeeper attributes display different distributions, with substantial mass at low values, reflecting the fact that most players in the dataset are not goalkeepers. The preferred foot variable is highly imbalanced, with right-footed players forming a clear majority.
+
+The distributions of overall rating and potential, shown in Figure X, further illustrate the distinction between current performance and assessed future ability. While the two measures are closely related, potential ratings are systematically shifted toward higher values, indicating that many players are evaluated as having greater long-term upside than their present level of performance suggests. This gap motivates the focus on potential as a separate prediction target and underscores the challenge of modeling a concept that is inherently forward-looking and position-dependent.
+
+```{r, echo=FALSE, fig.align='center', out.width='80%'}
+knitr::include_graphics("img/predictors.png")
+```
+
+
+
+# Methods
+Explain the structure of your model and your approach to building it. This can also include changes you made to your model in the process of building it. Someone should be able to read your methods section and *generally* be able to tell exactly what architechture you used. However REMEMBER that this should be geared towards an audience who might not understand R code. 
 
 If you want a table you can make one with [this website](https://www.tablesgenerator.com/markdown_tables) and paste the markdown table here. For example:
 
@@ -26,9 +63,6 @@ If you want a table you can make one with [this website](https://www.tablesgener
 ![My Caption Here](https://media.istockphoto.com/id/1322277517/photo/wild-grass-in-the-mountains-at-sunset.jpg?s=612x612&w=0&k=20&c=6mItwwFFGqKNKEAzv0mv6TaxhLN3zSE43bWmFN--J5w=){width=600}
 
 (Note that the `width=300` argument controls how wide your image will be.)
-
-# Methods
-Explain the structure of your model and your approach to building it. This can also include changes you made to your model in the process of building it. Someone should be able to read your methods section and *generally* be able to tell exactly what architechture you used. However REMEMBER that this should be geared towards an audience who might not understand R code. 
 
 # Results
 Discussion of how your model performed. Include a discussion about whether or not Deep Learning was necessary in this situation. Note: I do not want you to include large chunks of R output, just summaries that explain your model and its performance sufficiently. One of the marking criteria is whether you can do this in a structured way.

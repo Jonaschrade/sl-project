@@ -6,11 +6,18 @@ editor: visual
 
 # Data Import
 
-Load all required packages for data handling, preprocessing, model estimation, cross-validation and performance evaluation.
+Load reticulate-package to connect to a Conda environment for keras3 import.
+
+```{r}
+library(reticulate)
+use_condaenv("keras3", required = TRUE)
+```
+
+Load all other required packages for data handling, preprocessing, model estimation, cross-validation and performance evaluation.
 
 ```{r}
 #| label: load-pckg
-pacman::p_load(DBI, RSQLite, tidyverse, lubridate, naniar, caret, Metrics)
+pacman::p_load(DBI, RSQLite, tidyverse, lubridate, naniar, caret, Metrics, keras3)
 ```
 
 Connect to the SQLite database, extract player-level information by joining player metadata with player attributes, and close the database connection.
@@ -87,6 +94,251 @@ y <- df_player$potential
 ```
 
 # Task 1 - Deep Feedforward Neural Network
+
+This script implements a **nested, group-aware cross-validated neural network training pipeline** for regression using Keras. To prevent data leakage across repeated observations of the same player, all cross-validation splits are **grouped by `player_api_id`**, ensuring that each player appears in only one fold at a time. A 5-fold **outer cross-validation loop** is used to obtain unbiased estimates of generalization performance, while an **inner validation split (20% of players within each fold)** is employed for hyperparameter selection. Within each fold, features are standardized using parameters learned exclusively from the inner training set. Model selection is performed via a grid search over network architecture (three hidden layers), dropout rates, and learning-rate annealing factors. Each model is trained with **L2 regularization, batch normalization, dropout, early stopping, and adaptive learning-rate reduction/annealing** to improve convergence and reduce overfitting. The best-performing hyperparameter configuration (based on validation MSE) is then refit on the full outer training fold and evaluated on the held-out test fold. Trained models, optimal hyperparameters, loss trajectories, and fold-specific performance metrics (MSE and MAE) are saved to disk to ensure reproducibility and facilitate post-hoc analysis.
+
+```{r}
+
+set.seed(123)
+
+# Extract player IDs and remove the player_api_id column from the feature matrix
+player_id <- df_player$player_api_id
+X <- X[, colnames(X) != "player_api_id"]
+
+# Create directory to store fold models
+dir.create("models_nn", showWarnings = FALSE)
+
+## 5-fold, grouped by player
+outer_folds <- groupKFold(group = player_id, k = 5)
+
+# Initialize storage for outer CV results, as well as best hyperparameters and best loss logs per fold
+outer_results <- vector("list", 5)
+best_params   <- vector("list", 5)
+loss_log <- list()
+
+
+#Keras callback; prints training and validation loss per epoch with CV indices
+loss_printer <- function(i, g, j) {
+  callback_lambda(
+    on_epoch_end = function(epoch, logs) {
+      cat(sprintf(
+        "Outer %d | Grid %d | Epoch %d | loss=%.4f | val=%.4f\n",
+        i, g, epoch + 1,
+        logs$loss,
+        logs$val_loss))})}
+
+# Initialize hyperparameter grid (identical to lecture)
+grid <- crossing(
+  nodes1 = c(128, 256),
+  nodes2 = c(64, 128),
+  nodes3 = c(32, 64),
+  dropout1 = c(0.3, 0.4),
+  dropout2 = c(0.2, 0.3),
+  dropout3 = c(0.1, 0.2),
+  lr_annealing = c(0.1, 0.5))
+
+# Initialize L2 Regularizer 
+l2_reg <- regularizer_l2(0.001)
+
+# Build, compile, and train 3-hidden-layer neural network with regularization, early stopping, learning-rate annealing, and custom loss logging; returns fitted model and validation loss
+build_and_fit <- function(X_train, y_train,
+                          X_val, y_val,
+                          nodes1, nodes2, nodes3,
+                          dropout1, dropout2, dropout3,
+                          lr_annealing,
+                          i = NA, g = NA) {
+  ## Define sequential Keras model with three dense hidden layers
+  model <- keras_model_sequential() %>%
+    ### First hidden layer with L2 regularization, batch norm, and dropout
+    layer_dense(nodes1, activation = "relu",
+                input_shape = c(ncol(X_train)),
+                kernel_regularizer = l2_reg) %>%
+    layer_batch_normalization() %>%
+    layer_dropout(dropout1) %>%
+    ### Second hidden layer
+    layer_dense(nodes2, 
+                activation = "relu",
+                kernel_regularizer = l2_reg) %>%
+    layer_batch_normalization() %>%
+    layer_dropout(dropout2) %>%
+    ### Third hidden layer
+    layer_dense(nodes3, 
+                activation = "relu",
+                kernel_regularizer = l2_reg) %>%
+    layer_batch_normalization() %>%
+    layer_dropout(dropout3) %>%
+    ### Output layer for regression
+    layer_dense(1, activation="linear")
+
+  ## Compile model using Adam optimizer and MSE Loss 
+  model %>% compile(
+    optimizer = optimizer_adam(),
+    loss = "mean_squared_error")
+
+  ## Traing model with early stopping, learning-rate adjustment, and custom loss printing (see above).
+  history <- model %>% fit(
+    X_train, y_train,
+    epochs = 50,
+    batch_size = 128,
+    validation_data = list(X_val, y_val),
+    callbacks = list(
+      callback_early_stopping(
+        patience = 5,
+        restore_best_weights = TRUE),
+      callback_reduce_lr_on_plateau(
+        factor = lr_annealing),
+      loss_printer(i, g, 1)),
+    verbose = 0)
+  
+  ## Return the trained model, training history, and best validation loss
+  list(
+    model = model,
+    history = history,
+    val_loss = min(history$metrics$val_loss))}
+
+# Start training loop with first fold (adaptable in case of interruptions)
+start_i <- 1
+# OUTER LOOP over k-folds
+for (i in start_i:length(outer_folds)) {
+
+  cat("Outer fold:", i, "\n")
+  
+  ## Select indices for outer training fold, define complementary test indices
+  train_idx <- outer_folds[[i]]
+  test_idx  <- setdiff(seq_len(nrow(X)), train_idx)
+  
+  ## Subset features and target into training and test sets
+  X_train <- X[train_idx, ]
+  X_test  <- X[test_idx, ]
+  
+  y_train<-y[train_idx]
+  y_test  <- y[test_idx]
+  
+  ## Fold-specific inner validation-split
+  groups_outer <- unique(player_id[train_idx])
+  ### Randomly select 20% of unique player IDs for inner validation
+  val_groups <- sample(
+    groups_outer,
+    size = ceiling(0.2 * length(groups_outer)))
+  
+  ### Indices of inner validation and inner training observations
+  inner_val_idx <- which(player_id[train_idx] %in% val_groups)
+  inner_train_idx <- setdiff(
+    seq_len(nrow(X_train)),
+    inner_val_idx)
+  
+  X_inner_train <- X_train[inner_train_idx, ]
+  X_inner_val   <- X_train[inner_val_idx, ]
+
+  ## Fold-specific normalization
+  ### Fit scaler on inner training features to prevent data leakage
+  preproc <- preProcess(X_inner_train, method = c("center", "scale"))
+  ### Scale inner training and validation, as well as full train and test features
+  X_inner_train_scaled <- predict(preproc, X_inner_train)
+  X_inner_val_scaled   <- predict(preproc, X_inner_val)
+  
+  X_train_scaled       <- predict(preproc, X_train)
+  X_test_scaled        <- predict(preproc, X_test)
+  
+  
+  ## Grid Search
+  ### Grid results tracker
+  grid_results <- grid %>%
+    mutate(val_loss = NA_real_)
+  ### Best fit and best validation loss tracker
+  best_fit      <- NULL
+  best_val_loss <- Inf
+  
+  ### Build and fit model for each grid combination
+  for (g in seq_len(nrow(grid))) {
+    fit <- build_and_fit(
+      X_inner_train_scaled,
+      y_train[inner_train_idx],
+      X_inner_val_scaled,
+      y_train[inner_val_idx],
+      grid$nodes1[g],
+      grid$nodes2[g],
+      grid$nodes3[g],
+      grid$dropout1[g],
+      grid$dropout2[g],
+      grid$dropout3[g],
+      grid$lr_annealing[g],
+      i = i, g = g
+    )
+    
+    #### Tracks minimum validation loss for each grid combination
+    grid_results$val_loss[g] <- fit$val_loss
+    
+    #### Updates best validation loss and model fit
+    if (fit$val_loss < best_val_loss) {
+      best_val_loss <- fit$val_loss
+      best_fit <- fit
+    }
+    clear_session()
+  }
+  
+  ## Stores best hyperparameter combination of fold
+  best_params[[i]] <- grid_results %>%
+    arrange(val_loss) %>%
+    slice(1)
+  
+  ## Store loss descent
+  loss_log[[paste0("fold_", i)]] <-
+    tibble(
+      Fold = i,
+      Epoch = seq_along(best_fit$history$metrics$val_loss),
+      Train_Loss=best_fit$history$metrics$loss,
+      Val_Loss = best_fit$history$metrics$val_loss
+    )
+  
+  ## Refit best model of grid search with full fold training set
+  final_fit <- build_and_fit(
+    X_train_scaled,
+    y_train,
+    X_train_scaled,
+    y_train,
+    best_row$nodes1,
+    best_row$nodes2,
+    best_row$nodes3,
+    best_row$dropout1,
+    best_row$dropout2,
+    best_row$dropout3,
+    best_row$lr_annealing
+  )
+  
+  ## Save trained model
+  model_nn <- final_fit$model
+  model_path<-sprintf("models_nn/nn_outer_fold_%d.keras", i)
+  save_model(
+    model_nn,
+    filepath = model_path,
+    overwrite = TRUE
+  )
+  
+  ## Fold evaluation
+  y_pred_train <- predict(model_nn, X_train_scaled)
+  y_pred_test  <- predict(model_nn, X_test_scaled)
+  
+  ## Store evaluation metrics
+  outer_results[[i]] <- tibble(
+    Fold = i,
+    Train_MSE = mse(y_train, y_pred_train),
+    Test_MSE  = mse(y_test, y_pred_test),
+    Train_MAE = mae(y_train, y_pred_train),
+    Test_MAE  = mae(y_test, y_pred_test)
+  )
+
+  clear_session()
+} 
+
+## Save best parmeters and loss descent of optimal hyperparameter combination per fold
+saveRDS(best_params, file = "models_nn/best_params.rds")
+saveRDS(loss_log,   file = "models_nn/loss_log.rds")
+
+## Also save evaluation metrics
+cv_results <- bind_rows(outer_results)
+saveRDS(cv_results, file = "models_nn1/evaluation_metrics_nn.rds")
+```
 
 # Task 2 - Baseline Comparison with Traditional SL Models
 

@@ -50,7 +50,22 @@ knitr::include_graphics("img/predictors.png")
 
 
 # Methods
-Explain the structure of your model and your approach to building it. This can also include changes you made to your model in the process of building it. Someone should be able to read your methods section and *generally* be able to tell exactly what architechture you used. However REMEMBER that this should be geared towards an audience who might not understand R code. 
+
+## Neural Network
+
+## Baseline model: Lasso Regression
+
+As a transparent benchmark, we estimate a linear prediction model for player potential using Lasso regression. The Lasso extends OLS by adding an $\ell_1$ penalty that shrinks coefficients toward zero and sets some exactly to zero, thereby regularizing the model and performing variable selection. As in the neural network setup, all predictors are converted into a numeric design matrix to ensure consistent encoding of categorical variables. Predictors are standardized during estimation so that the penalty treats all features comparably across scales.
+
+Model performance is evaluated using grouped 10-fold cross-validation. As before, folds are constructed at the player level to prevent information leakage across training and test sets. We use 10 folds rather than LOOCV for computational efficiency, as training and test errors varied only marginally across folds, indicating stable performance estimates.
+
+Within each training fold, the regularization parameter $\lambda$ is selected via internal cross-validation over a grid of candidate values. The model is then refit using the selected $\lambda$, and predictive accuracy is assessed using MSE and MAE on training and held-out test data.
+
+Finally, we conduct diagnostic checks for the linear baseline, including assessments of linearity, homoskedasticity, and the residual distribution. While these conditions are not strictly required for predictive performance, particularly in the case of normally distributed errors, the diagnostics indicate that they are reasonably well satisfied and provide useful context for comparing the linear model to more flexible approaches.
+
+
+# Results
+Discussion of how your model performed. Include a discussion about whether or not Deep Learning was necessary in this situation. Note: I do not want you to include large chunks of R output, just summaries that explain your model and its performance sufficiently. One of the marking criteria is whether you can do this in a structured way.
 
 If you want a table you can make one with [this website](https://www.tablesgenerator.com/markdown_tables) and paste the markdown table here. For example:
 
@@ -63,10 +78,6 @@ If you want a table you can make one with [this website](https://www.tablesgener
 ![My Caption Here](https://media.istockphoto.com/id/1322277517/photo/wild-grass-in-the-mountains-at-sunset.jpg?s=612x612&w=0&k=20&c=6mItwwFFGqKNKEAzv0mv6TaxhLN3zSE43bWmFN--J5w=){width=600}
 
 (Note that the `width=300` argument controls how wide your image will be.)
-
-# Results
-Discussion of how your model performed. Include a discussion about whether or not Deep Learning was necessary in this situation. Note: I do not want you to include large chunks of R output, just summaries that explain your model and its performance sufficiently. One of the marking criteria is whether you can do this in a structured way.
-
 
 # Reflection
 Reflections on what you learned/discovered in the process of doing the assignment. Write about any struggles you had (and hopefully overcame) during the process. Things you would do differently in the future, ways you'll approach similar problems in the future, etc.

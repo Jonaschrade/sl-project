@@ -379,6 +379,16 @@ saveRDS(cv_results, file = "models_nn/evaluation_metrics_nn.rds")
 ```
 
 ```{r}
+#| label: Optimal hyperparameters
+
+## Display the optimal hyperparameter combination per fold
+best_params<-bind_rows(readRDS("models_nn/best_params.rds"))
+best_params
+
+
+```
+
+```{r}
 #| label: Learning curves
 
 # Plotting learning cuves of optimal grid model per fold

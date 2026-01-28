@@ -198,6 +198,7 @@ build_and_fit <- function(X_train, y_train,
                           nodes1, nodes2, nodes3,
                           dropout1, dropout2, dropout3,
                           lr_annealing,
+                          epochs=50,
                           i = NA, g = NA) {
   ## Define sequential Keras model with three dense hidden layers
   model <- keras_model_sequential() %>%
@@ -230,7 +231,7 @@ build_and_fit <- function(X_train, y_train,
   ## Traing model with early stopping, learning-rate adjustment, and custom loss printing (see above).
   history <- model %>% fit(
     X_train, y_train,
-    epochs = 50,
+    epochs = epochs,
     batch_size = 128,
     validation_data = list(X_val, y_val),
     callbacks = list(
@@ -343,6 +344,10 @@ for (i in start_i:length(outer_folds)) {
       Val_Loss = best_fit$history$metrics$val_loss
     )
   
+  ## Restrict max_epoch based on validation early-stopping,
+  ## allow for some extra convergence
+  max_epoch<-ceiling(length(best_fit$history$metrics$val_loss)*1.2)
+  
   ## Refit best model of grid search with full fold training set
   final_fit <- build_and_fit(
     X_train_scaled,
@@ -355,7 +360,8 @@ for (i in start_i:length(outer_folds)) {
     best_row$dropout1,
     best_row$dropout2,
     best_row$dropout3,
-    best_row$lr_annealing
+    best_row$lr_annealing,
+    epochs=max_epoch
   )
   
   ## Save trained model
@@ -413,7 +419,7 @@ ggplot(loss_log_df, aes(
   colour = factor(Fold),
   group = Fold
 )) +
-  geom_line(size = 1) +
+  geom_line(linewidth  = 1) +
   facet_wrap(
     ~ Loss_Type,
     ncol = 1,
@@ -432,6 +438,20 @@ ggplot(loss_log_df, aes(
     ) +
   labs(colour="Fold")+
   theme_minimal()
+```
+
+```{r}
+#| label: Neural Network: Results
+
+cv_results<-readRDS("models_nn/evaluation_metrics_nn.rds")
+cv_results
+cv_results |> 
+  summarise(
+    "Mean Train MSE" = mean(Train_MSE),
+    "Mean Test MSE"  = mean(Test_MSE),
+    "Mean Train MAE" = mean(Train_MAE),
+    "Mean Test MAE"  = mean(Test_MAE)
+  )
 ```
 
 # Task 2 - Baseline Comparison with Traditional SL Models

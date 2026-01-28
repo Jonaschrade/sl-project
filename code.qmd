@@ -163,7 +163,7 @@ dir.create("models_nn", showWarnings = FALSE)
 ## 5-fold, grouped by player
 outer_folds <- groupKFold(group = player_id, k = 5)
 
-# Initialize storage for outer CV results, as well as best hyperparameters and best loss logs per fold
+# Initialize storage for outer CV result, as well as best hyperparameters and best loss logs per fold
 outer_results <- vector("list", 5)
 best_params   <- vector("list", 5)
 loss_log <- list()
@@ -228,7 +228,7 @@ build_and_fit <- function(X_train, y_train,
     optimizer = optimizer_adam(),
     loss = "mean_squared_error")
 
-  ## Traing model with early stopping, learning-rate adjustment, and custom loss printing (see above).
+  ## Traing model with early stopping, learning-rate adjustment, and custom loss printing (see above)
   history <- model %>% fit(
     X_train, y_train,
     epochs = epochs,

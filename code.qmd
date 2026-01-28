@@ -145,7 +145,7 @@ y <- df_player$potential
 
 # Task 1 - Deep Feedforward Neural Network
 
-This script implements a **nested, group-aware cross-validated neural network training pipeline** for regression using Keras. To prevent data leakage across repeated observations of the same player, all cross-validation splits are **grouped by `player_api_id`**, ensuring that each player appears in only one fold at a time. A 5-fold **outer cross-validation loop** is used to obtain unbiased estimates of generalization performance, while an **inner validation split (20% of players within each fold)** is employed for hyperparameter selection. Within each fold, features are standardized using parameters learned exclusively from the inner training set. Model selection is performed via a grid search over network architecture (three hidden layers), dropout rates, and learning-rate annealing factors. Each model is trained with **L2 regularization, batch normalization, dropout, early stopping, and adaptive learning-rate reduction/annealing** to improve convergence and reduce overfitting. The best-performing hyperparameter configuration (based on validation MSE) is then refit on the full outer training fold and evaluated on the held-out test fold. Trained models, optimal hyperparameters, loss trajectories, and fold-specific performance metrics (MSE and MAE) are saved to disk to ensure reproducibility and facilitate post-hoc analysis.
+This script implements a nested, group-aware cross-validated neural network training pipeline for regression using Keras. To prevent data leakage across repeated observations of the same player, all cross-validation splits are grouped by `player_api_id`, ensuring that each player appears in only one fold at a time. A 5-fold outer cross-validation loop is used to obtain unbiased estimates of generalization performance, while an inner validation split (20% of players within each outer training fold) is employed for hyperparameter selection. Within each fold, features are standardized using parameters learned exclusively from the inner training set and subsequently applied to validation, training, and test data. Model selection is conducted via a grid search over network architecture (three fully connected hidden layers), dropout rates, and learning-rate annealing factors. Each candidate model is trained with L2 regularization, batch normalization, dropout, early stopping, and learning-rate reduction on plateau to promote stable convergence and mitigate overfitting. The hyperparameter configuration yielding the lowest validation MSE is selected, and the corresponding model is evaluated on the held-out test fold. Trained models, optimal hyperparameters, loss trajectories, and fold-specific performance metrics (MSE and MAE) are saved to disk to ensure reproducibility and support post-hoc analysis.
 
 ```{r}
 #| label: Task1 Neural Network
@@ -170,7 +170,7 @@ loss_log <- list()
 
 
 #Keras callback; prints training and validation loss per epoch with CV indices
-loss_printer <- function(i, g, j) {
+loss_printer <- function(i, g) {
   callback_lambda(
     on_epoch_end = function(epoch, logs) {
       cat(sprintf(
@@ -192,7 +192,7 @@ grid <- crossing(
 # Initialize L2 Regularizer 
 l2_reg <- regularizer_l2(0.001)
 
-# Build, compile, and train 3-hidden-layer neural network with regularization, early stopping, learning-rate annealing, and custom loss logging; returns fitted model and validation loss
+# Build, compile, and train 3-hidden-layer neural network with regularization, early stopping, learning-rate annealing, and custom loss logging; returns fitted model, training history, and validation loss
 build_and_fit <- function(X_train, y_train,
                           X_val, y_val,
                           nodes1, nodes2, nodes3,
@@ -240,10 +240,10 @@ build_and_fit <- function(X_train, y_train,
         restore_best_weights = TRUE),
       callback_reduce_lr_on_plateau(
         factor = lr_annealing),
-      loss_printer(i, g, 1)),
+      loss_printer(i, g)),
     verbose = 0)
   
-  ## Return the trained model, training history, and best validation loss
+  ## Return trained model, training history, and best validation loss
   list(
     model = model,
     history = history,
@@ -319,7 +319,7 @@ for (i in start_i:length(outer_folds)) {
       i = i, g = g
     )
     
-    #### Tracks minimum validation loss for each grid combination
+    #### Tracks validation loss for each grid combination
     grid_results$val_loss[g] <- fit$val_loss
     
     #### Updates best validation loss and model fit
@@ -344,28 +344,8 @@ for (i in start_i:length(outer_folds)) {
       Val_Loss = best_fit$history$metrics$val_loss
     )
   
-  ## Restrict max_epoch based on validation early-stopping,
-  ## allow for some extra convergence
-  max_epoch<-ceiling(length(best_fit$history$metrics$val_loss)*1.2)
-  
-  ## Refit best model of grid search with full fold training set
-  final_fit <- build_and_fit(
-    X_train_scaled,
-    y_train,
-    X_train_scaled,
-    y_train,
-    best_row$nodes1,
-    best_row$nodes2,
-    best_row$nodes3,
-    best_row$dropout1,
-    best_row$dropout2,
-    best_row$dropout3,
-    best_row$lr_annealing,
-    epochs=max_epoch
-  )
-  
   ## Save trained model
-  model_nn <- final_fit$model
+  model_nn <- best_fit$model
   model_path<-sprintf("models_nn/nn_outer_fold_%d.keras", i)
   save_model(
     model_nn,
@@ -389,7 +369,7 @@ for (i in start_i:length(outer_folds)) {
   clear_session()
 } 
 
-## Save best parmeters and loss descent of optimal hyperparameter combination per fold
+## Save parmeters and loss descent of optimal hyperparameter combination per fold
 saveRDS(best_params, file = "models_nn/best_params.rds")
 saveRDS(loss_log,   file = "models_nn/loss_log.rds")
 

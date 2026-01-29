@@ -7,7 +7,7 @@ date: ""
 format:
   pdf:
     geometry:
-      - top=1cm
+      - top=1.5cm
 ---
 
 
@@ -78,19 +78,23 @@ Finally, we conduct diagnostic checks for the linear baseline, including assessm
 
 # Results
 
-Discussion of how your model performed. Include a discussion about whether or not Deep Learning was necessary in this situation. Note: I do not want you to include large chunks of R output, just summaries that explain your model and its performance sufficiently. One of the marking criteria is whether you can do this in a structured way.
+Averaged across cross-validation folds, the evaluation metrics indicate strong predictive performance for both models, with mean absolute test errors of approximately 2 and 3 potential points, respectively. Additionally, for both models the training loss is only marginally below the test loss, providing no indication of overfitting.
 
-If you want a table you can make one with [this website](https://www.tablesgenerator.com/markdown_tables) and paste the markdown table here. For example:
+| K-Average Evaluation Metrics | Train MSE | Test MSE | Train MAE | Test MAE |
+|:----------------------------:|:---------:|:--------:|:---------:|----------|
+|        Neural Network        | 7.36      | 7.91     | 1.94      | 2.01     |
+|       Lasso Regression       | 15.83     | 15.90    | 3.07      | 3.08     |
 
-| Averaged Evaluation Metrics | Train MSE | Test MSE | Train MAE | Test MAE |
-|:---------------------------:|:---------:|:--------:|:---------:|----------|
-|        Neural Network       | 7.36      | 7.91     | 1.94      | 2.01     |
-|       Lasso Regression      | 15.83     | 15.90    | 3.07      | 3.08     |
+Nevertheless, the neural network consistently outperforms the baseline regression model on both the training and held-out test sets. Although the difference in mean absolute error is relatively modest, the regression model exhibits a mean squared error that is nearly twice as large as that of the neural network, indicating that a small number of extreme prediction errors disproportionately drive its overall deviation. This suggests that the neural network is less sensitive to such extreme outliers, likely due to its capacity to model nonlinear relationships and interactions as well as the regularization and early-stopping mechanisms that constrain overfitting to atypical observations. Despite its higher computational costs, these results indicate that the neural network constitutes the preferable approach for predicting player potential.
 
-![My Caption Here](https://media.istockphoto.com/id/1322277517/photo/wild-grass-in-the-mountains-at-sunset.jpg?s=612x612&w=0&k=20&c=6mItwwFFGqKNKEAzv0mv6TaxhLN3zSE43bWmFN--J5w=){width=600}
 
-(Note that the `width=300` argument controls how wide your image will be.)
 
-# Reflection
-Reflections on what you learned/discovered in the process of doing the assignment. Write about any struggles you had (and hopefully overcame) during the process. Things you would do differently in the future, ways you'll approach similar problems in the future, etc.
 
+
+# Reflection + Limitations
+
+While the neural network appears to exhibit greater capacity to model complex relationships between players’ physical and cognitive attributes, age, and potential, consistent with our expectation that the omission of positional interactions would disadvantage the regression model more than the network, this expectation is ultimately not confirmed. A qualitative comparison of the ten players with the largest average overprediction and underprediction errors across both models does not reveal systematic differences by position, as no position predominates in either group. However, more granular positional information at the player year level would be required to enable a more thorough quantitative assessment of such underlying complexity. Nevertheless, this is consistent with the notion that although neural networks may flexibly capture complex and potentially high dimensional structures, such patterns may neither manifest in interpretable group level regularities nor be readily identifiable by the researcher, let alone explicitly specified in a parametric model.
+
+Furthermore, the study design does not permit predictions of players’ career development, as both the modeling approach and data splitting are strictly cross sectional. Consequently, no inferences can be made about individual career trajectories or whether a player ultimately realizes their true potential. Each player is treated solely as a unit of observation, with potential assessments derived from pooled historical data across multiple generations of players. This cross sectional inference further assumes temporal stability in the relationship between player features and potential, both in real world development processes and in FIFA’s underlying assessment methodology across time.
+
+A final limitation concerns the restricted amount of data available to train the neural network within each cross validation fold. Although each training fold contains four fifths of the dataset, the additional inner validation split reduces the effective training sample to 60 percent of the full data. We therefore did not retrain the model on the complete training fold in order to retain protection against overfitting via validation based early stopping, which may have resulted in some performance loss. Future work could instead refit the model on the full training fold while fixing the number of training epochs, as no early indications of overfitting were observed.

@@ -43,7 +43,7 @@ dbDisconnect(con)
 
 # Exploratory Analysis
 
-Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age < 16 as we identified potentially erroneous records for very young players.
+Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age \< 16 as we identified potentially erroneous records for very young players.
 
 ```{r}
 #| label: prep-df
@@ -379,17 +379,33 @@ saveRDS(cv_results, file = "models_nn/evaluation_metrics_nn.rds")
 ```
 
 ```{r}
-#| label: Optimal hyperparameters
+#| label: Optimal hyperparameter configuration
 
-## Display the optimal hyperparameter combination per fold
-best_params<-bind_rows(readRDS("models_nn/best_params.rds"))
+## Display the grid options and optimal hyperparameter combination per fold
+grid_rows <- tibble(
+  Fold=c("Option A", "Option B"),
+  nodes1 = c(128, 256),
+  nodes2 = c(64, 128),
+  nodes3 = c(32, 64),
+  dropout1 = c(0.3, 0.4),
+  dropout2 = c(0.2, 0.3),
+  dropout3 = c(0.1, 0.2),
+  lr_annealing = c(0.1, 0.5)
+)
+
+best_params <- bind_rows(
+  grid_rows,
+  bind_rows(readRDS("models_nn/best_params.rds"))%>%
+    mutate(Fold=as.character(Fold))
+)%>%
+  rename("Grid/Fold"="Fold")
 best_params
 ```
 
 ```{r}
 #| label: Learning curves
 
-# Plotting learning cuves of optimal grid model per fold
+# Plotting learning cruves of optimal grid model per fold
 
 loss_log<-readRDS("models_nn/loss_log.rds")
 loss_log_df<-bind_rows(loss_log)
@@ -419,7 +435,7 @@ ggplot(loss_log_df, aes(x = Epoch,y = MSE,
 ```
 
 ```{r}
-#| label: nn-results
+#| label: NN-results by fold and K-averaged
 
 cv_results<-readRDS("models_nn/evaluation_metrics_nn.rds")
 cv_results
@@ -429,6 +445,90 @@ cv_results |>
     "Mean Test MSE"  = mean(Test_MSE),
     "Mean Train MAE" = mean(Train_MAE),
     "Mean Test MAE"  = mean(Test_MAE))
+```
+
+```{r}
+#| label: Out-of-fold inference; compare residuals
+
+set.seed(123)
+# Storage for fold-wise test predictions
+oof_predictions <- vector("list", length(outer_folds))
+
+for (i in seq_along(outer_folds)) {
+
+  cat("Running inference for outer fold:", i, "\n")
+  
+  ## Recreate train / test split
+  train_idx <- outer_folds[[i]]
+  test_idx  <- setdiff(seq_len(nrow(X)), train_idx)
+  
+  X_train <- X[train_idx, ]
+  X_test  <- X[test_idx, ]
+  
+  y_train <- y[train_idx]
+  y_test  <- y[test_idx]
+  
+  ## Recreate inner split to refit scaler (no leakage)
+  groups_outer <- unique(player_id[train_idx])
+  val_groups <- sample(
+    groups_outer,
+    size = ceiling(0.2 * length(groups_outer))
+  )
+  
+  inner_val_idx <- which(player_id[train_idx] %in% val_groups)
+  inner_train_idx <- setdiff(seq_len(nrow(X_train)), inner_val_idx)
+  
+  X_inner_train <- X_train[inner_train_idx, ]
+  
+  ## Fold-specific scaling (same logic as training)
+  preproc <- preProcess(X_inner_train, method = c("center", "scale"))
+  X_test_scaled <- predict(preproc, X_test)
+  
+  ## Load trained model
+  model_path <- sprintf("models_nn/nn_outer_fold_%d.keras", i)
+  model_nn <- load_model(model_path)
+  
+  ## Inference
+  y_pred <- as.numeric(predict(model_nn, X_test_scaled))
+  
+  ## Store out-of-fold predictions
+  oof_predictions[[i]] <- tibble(
+    fold = i,
+    row_id = test_idx,
+    player_api_id = player_id[test_idx],
+    actual_potential = y_test,
+    predicted_potential = y_pred,
+    residual = abs(y_test - y_pred)
+  )
+  
+  clear_session()
+}
+player_lookup <- df_player_raw %>%
+  select(player_api_id, player_name) %>%
+  distinct()
+
+## Concatenate all folds
+oof_results <- bind_rows(oof_predictions) %>%
+  arrange(row_id)%>%
+  mutate(residual=actual_potential-predicted_potential)%>%
+  left_join(player_lookup, by = "player_api_id")%>%
+  group_by(player_api_id) %>%
+  summarise(
+    player_name = first(player_name),
+    mean_actual_potential = mean(actual_potential, na.rm = TRUE),
+    mean_predicted_potential = mean(predicted_potential, na.rm = TRUE),
+    mean_residual = mean(residual, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+oof_results%>%
+ arrange(mean_residual)%>%
+  head(10)
+
+oof_results %>%
+  arrange(desc(mean_residual)) %>%
+  head(10)
+
 ```
 
 # Task 2 - Baseline Comparison with Traditional SL Models

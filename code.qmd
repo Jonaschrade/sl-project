@@ -11,6 +11,7 @@ Load reticulate-package to connect to a Conda environment for keras3 import.
 ```{r}
 #| label: keras-import
 #| eval: false
+#| warning: false
 
 library(reticulate)
 use_condaenv("keras3", required = TRUE)
@@ -20,8 +21,10 @@ Load all other required packages for data handling, preprocessing, model estimat
 
 ```{r}
 #| label: load-pckg
+#| warning: false
+#| message: false
 
-pacman::p_load(DBI, RSQLite, tidyverse, lubridate, naniar, caret, Metrics, keras3, ggh4x)
+pacman::p_load(DBI, RSQLite, tidyverse, lubridate, naniar, caret, Metrics, keras3, ggh4x, glmnet)
 ```
 
 Connect to the SQLite database, extract player-level information by joining player metadata with player attributes, and close the database connection.
@@ -40,7 +43,7 @@ dbDisconnect(con)
 
 # Exploratory Analysis
 
-Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age \< 16 as we identified potentially erroneous records for very young players.
+Clean and prepare the player dataset for modeling and analysis: remove incomplete rows, compute player age at the time of each attribute measurement, drop non-predictive identifiers and metadata, and exclude observations with age < 16 as we identified potentially erroneous records for very young players.
 
 ```{r}
 #| label: prep-df
@@ -98,20 +101,20 @@ Visualizing the marginal distributions of all predictors using faceted density p
 #| label: pred-distr
 #| fig.height: 6
 #| fig.width: 9
-predictors <- colnames(X)
+#| warning: false
+predictors <- df_player %>% select(-potential, -overall_rating) %>%
+  select(where(is.numeric)) %>% colnames()
 
-df_long <- df_plot %>% 
-  pivot_longer(
-    cols = all_of(predictors),
-    names_to = "predictor",
-    values_to = "value")
+df_long <- df_player %>%
+  pivot_longer(cols = all_of(predictors),
+               names_to = "predictor", values_to = "value")
 
 ggplot(df_long, aes(x = value)) +
   geom_density(fill = "grey70", alpha = 0.6) +
   facet_wrap(~ predictor, scales = "free") +
   labs(title = "Distributions of Predictors", x = NULL, y = "Density") +
-  theme_minimal() +
-  theme(plot.title = element_text(hjust = 0.5), axis.text.y=element_blank())
+  theme_minimal() + theme( plot.title = element_text(hjust = 0.5), axis.text.y = element_blank())
+
 ```
 
 This chunk compares the empirical distributions of player potential and overall rating.
@@ -341,8 +344,7 @@ for (i in start_i:length(outer_folds)) {
       Fold = i,
       Epoch = seq_along(best_fit$history$metrics$val_loss),
       Train_Loss=best_fit$history$metrics$loss,
-      Val_Loss = best_fit$history$metrics$val_loss
-    )
+      Val_Loss = best_fit$history$metrics$val_loss)
   
   ## Save trained model
   model_nn <- best_fit$model
@@ -350,8 +352,7 @@ for (i in start_i:length(outer_folds)) {
   save_model(
     model_nn,
     filepath = model_path,
-    overwrite = TRUE
-  )
+    overwrite = TRUE)
   
   ## Fold evaluation
   y_pred_train <- predict(model_nn, X_train_scaled)
@@ -363,8 +364,7 @@ for (i in start_i:length(outer_folds)) {
     Train_MSE = mse(y_train, y_pred_train),
     Test_MSE  = mse(y_test, y_pred_test),
     Train_MAE = mae(y_train, y_pred_train),
-    Test_MAE  = mae(y_test, y_pred_test)
-  )
+    Test_MAE  = mae(y_test, y_pred_test))
 
   clear_session()
 } 
@@ -384,8 +384,6 @@ saveRDS(cv_results, file = "models_nn/evaluation_metrics_nn.rds")
 ## Display the optimal hyperparameter combination per fold
 best_params<-bind_rows(readRDS("models_nn/best_params.rds"))
 best_params
-
-
 ```
 
 ```{r}
@@ -400,38 +398,28 @@ loss_log_df <- loss_log_df %>%
   pivot_longer(
     cols = c(Train_Loss, Val_Loss),
     names_to = "Loss_Type",
-    values_to = "MSE"
-  )
+    values_to = "MSE" )
 
-ggplot(loss_log_df, aes(
-  x = Epoch,
-  y = MSE,
+ggplot(loss_log_df, aes(x = Epoch,y = MSE,
   colour = factor(Fold),
-  group = Fold
-)) +
+  group = Fold)) +
   geom_line(linewidth  = 1) +
   facet_wrap(
     ~ Loss_Type,
     ncol = 1,
     scales = "free_y",
-    labeller = labeller(
-      Loss_Type = c(
+    labeller = labeller(Loss_Type = c(
         Train_Loss = "Training Loss",
-        Val_Loss   = "Validation Loss"
-      )
-    )
-  ) +
-  facetted_pos_scales(
-    y = list(
+        Val_Loss   = "Validation Loss"))) +
+  facetted_pos_scales(y = list(
       Loss_Type == "Train_Loss" ~ scale_y_continuous(limits = c(0,50)),
-      Loss_Type == "Val_Loss"   ~ scale_y_continuous(limits=c(0,20)))
-    ) +
+      Loss_Type == "Val_Loss"   ~ scale_y_continuous(limits=c(0,20)))) +
   labs(colour="Fold")+
   theme_minimal()
 ```
 
 ```{r}
-#| label: Neural Network: Results
+#| label: nn-results
 
 cv_results<-readRDS("models_nn/evaluation_metrics_nn.rds")
 cv_results
@@ -440,8 +428,7 @@ cv_results |>
     "Mean Train MSE" = mean(Train_MSE),
     "Mean Test MSE"  = mean(Test_MSE),
     "Mean Train MAE" = mean(Train_MAE),
-    "Mean Test MAE"  = mean(Test_MAE)
-  )
+    "Mean Test MAE"  = mean(Test_MAE))
 ```
 
 # Task 2 - Baseline Comparison with Traditional SL Models
@@ -571,7 +558,7 @@ The residuals-versus-fitted plot shows that residuals are centered around zero w
 ### Normality of Residuals
 
 ```{r}
-#| label: homoskedasticity check
+#| label: normality-check
 df_qq <- tibble(resid = resid(model_full))
 
 ggplot(df_qq, aes(sample = resid)) +

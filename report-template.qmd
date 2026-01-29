@@ -30,9 +30,9 @@ In contrast, goalkeeper-specific attributes exhibit weak or negative correlation
 
 ::: {layout-ncol=2}
 
-![](img/cor_heatmap.png){width=100%}
+![Figure 1: Correlations among relevant predictors and potential score](img/cor_heatmap.png){width=100%}
 
-![](img/histograms_ratings.png){width=100%}
+![Figure 2: Distribution of overall and potential player ratings](img/histograms_ratings.png){width=100%}
 
 :::
 
@@ -41,12 +41,7 @@ In contrast, goalkeeper-specific attributes exhibit weak or negative correlation
 
 The marginal distributions of player attributes are generally unimodal and concentrated around mid-to-high values. Goalkeeper attributes display different distributions, with substantial mass at low values, reflecting the fact that most players in the dataset are not goalkeepers. The preferred foot variable is highly imbalanced, with right-footed players forming a clear majority.
 
-The distributions of overall rating and potential, shown in Figure X, further illustrate the distinction between current performance and assessed future ability. While the two measures are closely related, potential ratings are systematically shifted toward higher values, indicating that many players are evaluated as having greater long-term upside than their present level of performance suggests. This gap motivates the focus on potential as a separate prediction target and underscores the challenge of modeling a concept that is inherently forward-looking and position-dependent.
-
-```{r, echo=FALSE, fig.align='center', out.width='80%'}
-knitr::include_graphics("img/predictors.png")
-```
-
+The distributions of overall rating and potential, shown in Figure 2, further illustrate the distinction between current performance and assessed future ability. While the two measures are closely related, potential ratings are systematically shifted toward higher values, indicating that many players are evaluated as having greater long-term upside than their present level of performance suggests. This gap motivates the focus on potential as a separate prediction target and underscores the challenge of modeling a concept that is inherently forward-looking and position-dependent.
 
 
 # Methods

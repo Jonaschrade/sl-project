@@ -72,7 +72,7 @@ knitr::include_graphics("img/nn_learning_curves.png")
 ```
 
 
-Across five folds, 128 hyperparameter combinations are evaluated, resulting in 640 training runs. The learning curves of the optimal configurations exhibit a sharp initial decline in both training and validation loss, followed by a gradual decrease and a clear plateau in the validation loss around epoch 30, which triggers early stopping. Notably, in fold 2 the training loss stabilizes more rapidly after the initial decline, suggesting greater structural complexity in the training data. Finally, the optimal model is tested against the test fold with evaluation metrics reported below. 
+Across five folds, 128 hyperparameter combinations are evaluated, resulting in 640 training runs. The learning curves of the optimal configurations exhibit a sharp initial decline in both training and validation loss, followed by a gradual decrease and a clear plateau in the validation loss around epoch 30, which triggers early stopping. The convergence patterns, early-stopping points, and final validation losses are similar between folds, indicating robust and stable training behavior under different data splits. Notably, in fold 2 the training loss stabilizes more rapidly after the initial decline, suggesting some greater structural complexity in the training data. Finally, the optimal model is tested against the test fold with evaluation metrics reported below.
 
 
 ## Baseline model: Lasso Regression

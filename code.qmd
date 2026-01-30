@@ -2,6 +2,7 @@
 title: "sl-project"
 format: html
 editor: visual
+subtitle: "\\href{https://github.com/Jonaschrade/sl-project}{GitHub Repository}"
 ---
 
 # Data Import
@@ -37,7 +38,6 @@ con <- dbConnect(RSQLite::SQLite(), dbname = "data/database.sqlite")
 df_player_raw <- dbGetQuery(con, "SELECT * FROM Player JOIN Player_Attributes USING (player_api_id)")
 names(df_player_raw) <- make.unique(names(df_player_raw))
 
-
 dbDisconnect(con)
 ```
 
@@ -47,6 +47,7 @@ Clean and prepare the player dataset for modeling and analysis: remove incomplet
 
 ```{r}
 #| label: prep-df
+
 df_player <- df_player_raw %>%
   mutate(date = ymd_hms(date),
          birthday = ymd_hms(birthday),
@@ -59,6 +60,8 @@ Visualizing the extent of missing data across variables in the player dataset by
 
 ```{r}
 #| label: missings
+#| fig.height: 7
+#| fig.width: 9
 
 gg_miss_var(df_player, show_pct = TRUE) +
   labs(title = "Percentage of Missing Values per Variable")
@@ -68,6 +71,7 @@ This chunk computes correlations between player potential and all numeric variab
 
 ```{r}
 #| label: corr-heatmap
+ 
 target <- "potential"
 
 cors <- df_player %>%
@@ -102,10 +106,15 @@ Visualizing the marginal distributions of all predictors using faceted density p
 #| fig.height: 6
 #| fig.width: 9
 #| warning: false
-predictors <- df_player %>% select(-potential, -overall_rating) %>%
-  select(where(is.numeric)) %>% colnames()
+
+predictors <- df_player %>%
+  select(-potential, -overall_rating, -player_api_id) %>%
+  select(where(is.numeric)) %>%
+  colnames()
+predictors <- c(predictors, "preferred_foot")
 
 df_long <- df_player %>%
+  mutate(preferred_foot = ifelse(preferred_foot == "right", 1, 0)) %>%
   pivot_longer(cols = all_of(predictors),
                names_to = "predictor", values_to = "value")
 
@@ -148,7 +157,7 @@ y <- df_player$potential
 
 # Task 1 - Deep Feedforward Neural Network
 
-This script implements a nested, group-aware cross-validated neural network training pipeline for regression using Keras. To prevent data leakage across repeated observations of the same player, all cross-validation splits are grouped by `player_api_id`, ensuring that each player appears in only one fold at a time. A 5-fold outer cross-validation loop is used to obtain unbiased estimates of generalization performance, while an inner validation split (20% of players within each outer training fold) is employed for hyperparameter selection. Within each fold, features are standardized using parameters learned exclusively from the inner training set and subsequently applied to validation, training, and test data. Model selection is conducted via a grid search over network architecture (three fully connected hidden layers), dropout rates, and learning-rate annealing factors. Each candidate model is trained with L2 regularization, batch normalization, dropout, early stopping, and learning-rate reduction on plateau to promote stable convergence and mitigate overfitting. The hyperparameter configuration yielding the lowest validation MSE is selected, and the corresponding model is evaluated on the held-out test fold. Trained models, optimal hyperparameters, loss trajectories, and fold-specific performance metrics (MSE and MAE) are saved to disk to ensure reproducibility and support post-hoc analysis.
+This script implements a nested, group-aware cross-validated neural network training pipeline for regression using Keras. To prevent data leakage across repeated observations of the same player, all cross-validation splits are grouped by `player_api_id`, ensuring that each player appears in only one fold at a time. A 5-fold outer cross-validation loop is used to obtain unbiased estimates of generalization performance, while an inner validation split (20% of players within each outer training fold) is employed for hyperparameter selection. Within each fold, features are standardized using parameters learned exclusively from the inner training set and subsequently applied to validation, training, and test data. Model selection is conducted via a grid search over network architecture (three fully connected hidden layers), dropout rates, and learning-rate annealing factors. Each candidate model is trained with L2 regularization, batch normalization, dropout, early stopping, and learning-rate reduction on plateau to promote stable convergence and mitigate overfitting. The hyperparameter configuration yielding the lowest validation MSE is selected, and the corresponding model is evaluated on the held-out test fold.
 
 ```{r}
 #| label: Task1 Neural Network
@@ -390,14 +399,12 @@ grid_rows <- tibble(
   dropout1 = c(0.3, 0.4),
   dropout2 = c(0.2, 0.3),
   dropout3 = c(0.1, 0.2),
-  lr_annealing = c(0.1, 0.5)
-)
+  lr_annealing = c(0.1, 0.5))
 
 best_params <- bind_rows(
   grid_rows,
   bind_rows(readRDS("models_nn/best_params.rds"))%>%
-    mutate(Fold=as.character(Fold))
-)%>%
+    mutate(Fold=as.character(Fold)))%>%
   rename("Grid/Fold"="Fold")
 best_params
 ```
@@ -407,8 +414,8 @@ best_params
 
 # Plotting learning cruves of optimal grid model per fold
 
-loss_log<-readRDS("models_nn/loss_log.rds")
-loss_log_df<-bind_rows(loss_log)
+loss_log <- readRDS("models_nn/loss_log.rds")
+loss_log_df <- bind_rows(loss_log)
 
 loss_log_df <- loss_log_df %>%
   pivot_longer(
@@ -430,7 +437,7 @@ ggplot(loss_log_df, aes(x = Epoch,y = MSE,
   facetted_pos_scales(y = list(
       Loss_Type == "Train_Loss" ~ scale_y_continuous(limits = c(0,50)),
       Loss_Type == "Val_Loss"   ~ scale_y_continuous(limits=c(0,20)))) +
-  labs(colour="Fold")+
+  labs(colour="Fold") +
   theme_minimal()
 ```
 
@@ -439,7 +446,7 @@ ggplot(loss_log_df, aes(x = Epoch,y = MSE,
 
 cv_results<-readRDS("models_nn/evaluation_metrics_nn.rds")
 cv_results
-cv_results |> 
+cv_results %>% 
   summarise(
     "Mean Train MSE" = mean(Train_MSE),
     "Mean Test MSE"  = mean(Test_MSE),
@@ -472,8 +479,7 @@ for (i in seq_along(outer_folds)) {
   groups_outer <- unique(player_id[train_idx])
   val_groups <- sample(
     groups_outer,
-    size = ceiling(0.2 * length(groups_outer))
-  )
+    size = ceiling(0.2 * length(groups_outer)))
   
   inner_val_idx <- which(player_id[train_idx] %in% val_groups)
   inner_train_idx <- setdiff(seq_len(nrow(X_train)), inner_val_idx)
@@ -498,11 +504,10 @@ for (i in seq_along(outer_folds)) {
     player_api_id = player_id[test_idx],
     actual_potential = y_test,
     predicted_potential = y_pred,
-    residual = abs(y_test - y_pred)
-  )
+    residual = abs(y_test - y_pred))
   
-  clear_session()
-}
+  clear_session()}
+
 player_lookup <- df_player_raw %>%
   select(player_api_id, player_name) %>%
   distinct()
@@ -518,8 +523,7 @@ oof_results <- bind_rows(oof_predictions) %>%
     mean_actual_potential = mean(actual_potential, na.rm = TRUE),
     mean_predicted_potential = mean(predicted_potential, na.rm = TRUE),
     mean_residual = mean(residual, na.rm = TRUE),
-    .groups = "drop"
-  )
+    .groups = "drop")
 
 oof_results%>%
  arrange(mean_residual)%>%
@@ -609,7 +613,7 @@ The results indicate highly stable performance of the lasso model across all 10 
 
 ## Model Diagnostics
 
-To assess the robustness of the baseline linear regression model, we conduct a series of diagnostic checks examining key model assumptions and the stability of predictive performance.
+To assess the robustness of the baseline lasso regression model, we conduct a series of diagnostic checks examining key model assumptions and the stability of predictive performance.
 
 ### Linearity Check
 

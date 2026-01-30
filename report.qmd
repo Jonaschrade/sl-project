@@ -1,9 +1,7 @@
 ---
-title: "From Ratings to Rising Stars: Predicting Player Potential Using FIFA Attributes"
-author:
-  - "Jonas Schrade (01/1080887)"
-  - "Niklas Bacher (01/1081503)"
-date: ""
+title: "Predicting Player Potential using FIFA Attributes: A Comparison of Neural Networks and Benchmark Models"
+author: "Jonas Schrade (01/1080887) - Niklas Bacher (01/1081503)"
+subtitle: "\\href{https://github.com/Jonaschrade/sl-project}{GitHub Repository}"
 format:
   pdf:
     geometry:
@@ -13,11 +11,11 @@ format:
 
 # Introduction
 
-This project uses the European Soccer Database with a focus on player-level data, particularly attributes derived from the FIFA video game series. These ratings summarize players’ technical skills, physical traits, and overall ability as assessed by professional scouts. Although originating from a simulation game, FIFA attributes are widely used as standardized measures of player quality and have been shown to correlate strongly with real-world performance. They therefore provide a practical and accessible information source for player evaluation.
+Data-driven player evaluation has become a central tool in modern football analysis. This project uses the European Soccer Database with a focus on player-level data, particularly attributes derived from the FIFA video game series. These ratings summarize players’ technical skills, physical traits, and overall ability as assessed by professional scouts. Although originating from a simulation game, FIFA attributes are widely used as standardized measures of player quality and have been shown to correlate strongly with real-world performance. They therefore provide a practical and accessible information source for player evaluation.
 
 Predicting player performance based on these attributes has clear practical relevance. Clubs can use such predictions to inform recruitment, contract decisions, and talent development, while analysts may employ them to compare players across leagues and seasons. Understanding the predictive power of FIFA attributes is thus directly relevant for real-world decision-making in professional football.
 
-The aim of this project is to examine whether complex models such as deep neural networks outperform simpler statistical learning approaches in linking player characteristics to observed performance and potential ratings. Player potential is a latent concept reflecting expected future development rather than directly observed outcomes. More flexible models may better capture position-specific differences not explicitly encoded in the data. To test this, a standard benchmark model is compared to a neural network using identical predictors and outcomes, allowing an assessment of whether deep learning adds value beyond simpler models in identifying high-potential players.
+The aim of this project is to examine whether complex models such as deep neural networks outperform simpler statistical learning approaches in linking player characteristics to potential ratings. Player potential is a latent concept reflecting expected future development rather than directly observed outcomes. More flexible models may better capture position-specific differences not explicitly encoded in the data. To test this, a standard benchmark model is compared to a neural network using identical predictors and outcomes, allowing an assessment of whether deep learning adds value beyond simpler models in identifying high-potential players.
 
 # Analysis 
 
@@ -25,7 +23,7 @@ The aim of this project is to examine whether complex models such as deep neural
 
 Several preprocessing steps were applied prior to analysis. Measurement dates and birthdates were used to compute each player’s age in full years at the time each attribute snapshot was recorded. Players younger than 16 were excluded to remove implausible or non-comparable observations identified through manual screening. Non-informative identifiers and metadata, such as player names, internal IDs, and FIFA-specific API keys, were dropped to retain only predictive variables.
 
-Observations with missing values were removed to ensure compatibility with the modeling framework. Overall missingness is low and limited to a small number of technical attributes; given the large sample size and the focus on prediction rather than inference, a complete-case approach was used. When modeling player potential, the overall rating was excluded from the feature set to avoid mechanically related information. The final dataset consists of 178,364 observations and 34 features from 10,582 players.
+Observations with missing values were removed to ensure compatibility with the modeling framework. Overall missingness is low and limited to a small number of technical attributes. Given the large sample size and the focus on prediction rather than inference, a complete-case approach was used. When modeling player potential, the overall rating was excluded from the feature set to avoid mechanically related information. The final dataset consists of 178,364 observations and 34 features from 10,582 players.
 
 ### Variable Structure and Correlations
 
@@ -35,11 +33,12 @@ In contrast, goalkeeper-specific attributes exhibit weak or negative correlation
 
 ::: {layout-ncol=2}
 
-![Figure 1: Correlations among relevant predictors and potential score](img/cor_heatmap.png){width=100%}
+![Figure 1: Correlations among relevant predictors and potential score](img/cor_heatmap.png){width=100% height=6cm}
 
-![Figure 2: Distribution of overall and potential player ratings](img/histograms_ratings.png){width=100%}
+![Figure 2: Distribution of overall and potential player ratings](img/histograms_ratings.png){width=100% height=6cm}
 
 :::
+
 
 
 ### Distributions of Attributes and Ratings
@@ -56,6 +55,7 @@ The distributions of overall rating and potential (Figure 2) highlight the diffe
 The neural network follows a sequential architecture consisting of an input layer matching the feature dimensionality, three fully connected hidden layers with ReLU activations, and a single-unit output layer with linear activation. Each hidden layer incorporates $\ell_2$ (ridge) regularization with a decay of 0.001, batch normalization, and dropout to constrain weights, accelerate convergence, and enhance robustness, respectively.
 
 For model training, features are organized in a numeric design matrix to ensure consistent encoding of categorical variables, with the target variable stored separately. Training and evaluation employ nested, group-aware cross-validation, grouping folds by unique player identifiers to prevent cross-sectional data leakage. Within each training fold, hyperparameters are selected via grid search using an internal train-validation split. The grid varies hidden-layer sizes, dropout rates, and the learning-rate annealing factor (two values each; reported in the code document), while batch size (128), maximum epochs (50), and early stopping with a patience of five epochs are held constant across all folds and configurations. The Adam optimizer with a default initial learning rate of 0.001 is used throughout, enabling fast and stable convergence. This approach balances robust model validation with computational efficiency and reproducibility.
+
 Before training, 20% of the training data are held out as a validation set to guide optimization and hyperparameter selection. The normalization scaler is fitted exclusively on the inner training set and subsequently applied to the validation and test sets.
 
 ```{r, echo=FALSE, fig.cap="Learning curves of the optimal hyperparameter configuration across five outer folds.", out.width="50%"}
@@ -89,11 +89,9 @@ Nevertheless, the neural network consistently outperforms the baseline regressio
 
 
 
+# Reflection & Limitations
 
-
-# Reflection + Limitations
-
-While the neural network appears to exhibit greater capacity to model complex relationships between players’ physical and cognitive attributes, age, and potential, consistent with our expectation that the omission of positional interactions would disadvantage the regression model more than the network, this expectation is ultimately not confirmed. A qualitative comparison of the ten players with the largest average overprediction and underprediction errors across both models does not reveal systematic differences by position, as no position predominates in either group. However, more granular positional information at the player year level would be required to enable a more thorough quantitative assessment of such underlying complexity. Nevertheless, this is consistent with the notion that although neural networks may flexibly capture complex and potentially high dimensional structures, such patterns may neither manifest in interpretable group level regularities nor be readily identifiable by the researcher, let alone explicitly specified in a parametric model.
+While the neural network appears better suited to modeling complex relationships between player attributes, age, and potential, this flexibility does not translate into superior predictive performance. Accordingly, our expectation that the regression model would be more strongly disadvantaged by the omission of positional interactions is not supported. A qualitative comparison of the ten players with the largest average overprediction and underprediction errors across both models does not reveal systematic differences by position, as no position predominates in either group. However, more granular positional information at the player year level would be required to enable a more thorough quantitative assessment of such underlying complexity. Nevertheless, this is consistent with the idea that neural networks can flexibly capture complex and high-dimensional patterns. Such patterns, however, may not translate into clear group-level regularities and are often difficult for researchers to identify or specify in parametric models.
 
 Furthermore, the study design does not permit predictions of players’ career development, as both the modeling approach and data splitting are strictly cross sectional. Consequently, no inferences can be made about individual career trajectories or whether a player ultimately realizes their true potential. Each player is treated solely as a unit of observation, with potential assessments derived from pooled historical data across multiple generations of players. This cross sectional inference further assumes temporal stability in the relationship between player features and potential, both in real world development processes and in FIFA’s underlying assessment methodology across time.
 

@@ -1,8 +1,8 @@
 ---
 title: "Statistical Learning: Final Project"
+subtitle: "[GitHub Repository](https://github.com/Jonaschrade/sl-project)"
 format: html
 editor: visual
-subtitle: "\\href{https://github.com/Jonaschrade/sl-project}{GitHub Repository}"
 ---
 
 # Data Import

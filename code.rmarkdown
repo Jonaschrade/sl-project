@@ -681,3 +681,4 @@ ggplot(df_qq, aes(sample = resid)) +
 ```
 
 The Q–Q plot of the residuals indicates approximate normality, with observations closely following the reference line in the central region. Deviations are visible in the tails, suggesting slightly heavier tails than a normal distribution, which is expected given the large sample size. These deviations are unlikely to affect the model’s predictive performance massivly.
+
